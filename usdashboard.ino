@@ -35,7 +35,7 @@ void loop() {
   iot.ReadAll();
 
   // Read DISTANCE from cloud if needed (optional)
-  String serverDistance = iot.SyncVar("distance");
+  String serverDistance = iot.SyncVar("DISTANCE");
   Serial.println("Distance from cloud: " + serverDistance);
 
   // Get actual ultrasonic value
@@ -44,7 +44,7 @@ void loop() {
   Serial.println(distance);
 
   // Send new distance value to dashboard
-  iot.WriteVar("distance", String(distance));
+  iot.WriteVar("distance", String(DISTANCE));
 
   delay(5000); // 5 second update rate
 }
