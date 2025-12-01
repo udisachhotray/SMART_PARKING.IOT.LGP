@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time IoT Parking Dashboard</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for aesthetic enhancements and animations */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #B0E0E6; /* Pastel Blue Background */
+            color: #333333; /* Dark text for contrast */
+        }
+
+        /* Define a pulsating effect for the full state (using dark green glow) */
+        @keyframes pulse-full {
+            0%, 100% { box-shadow: 0 0 5px rgba(0, 128, 0, 0.7), 0 0 10px rgba(0, 128, 0, 0.5); }
+            50% { box-shadow: 0 0 10px rgba(0, 128, 0, 0.9), 0 0 20px rgba(0, 128, 0, 0.7); }
+        }
+
+        /* Define a more intense pulse for the summary full state (using dark red glow) */
+        @keyframes alert-pulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 10px rgba(180, 0, 0, 0.7); }
+            50% { transform: scale(1.02); box-shadow: 0 0 20px rgba(180, 0, 0, 1); }
+        }
+
+        .card-shadow-light {
+            /* Adjusted shadow for light background */
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 10px 20px rgba(0, 0, 0, 0.05);
+            transition: all 0.4s ease-in-out;
+            border: 1px solid #e0e0e0;
+        }
+
+        .card-shadow-light:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 15px 25px rgba(0, 0, 0, 0.15), 0 0 10px rgba(50, 150, 255, 0.5); /* Subtle blue glow on hover */
+        }
+
+        .digital-font {
+            /* Using a monospace font stack for a digital/tech look */
+            font-family: 'Monaco', 'Courier New', monospace;
+        }
+
+        .is-full-animation {
+            animation: pulse-full 1.5s infinite alternate;
+        }
+
+        .is-alert-animation {
+            animation: alert-pulse 1.5s infinite alternate;
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-12">
+
+    <header class="text-center mb-16">
+        <!-- UPDATED HEADING -->
+        <h1 class="text-5xl font-extrabold text-blue-800 mb-2 digital-font tracking-wider drop-shadow-lg">
+            🚗 SMART PARKING MANAGEMENT SYSTEM 🅿️
+        </h1>
+        <p class="text-lg text-gray-600 mt-4">Real-time Telemetry for Unit UC11</p>
+        
+        <!-- NEW: Dynamic Slot Counts -->
+        <div class="mt-4 flex justify-center space-x-8 digital-font text-lg border-t border-b border-gray-400 py-3 max-w-lg mx-auto bg-white/50 rounded-lg">
+            <div class="text-gray-600">Total Slots: <span class="text-black font-bold">2</span></div>
+            <div class="text-green-600">🟢 Available: <span id="available-count" class="text-black font-bold">--</span></div>
+            <div class="text-red-600">🔴 Occupied: <span id="occupied-count" class="text-black font-bold">--</span></div>
+        </div>
+        <!-- END NEW -->
+
+    </header>
+
+    <main class="max-w-6xl mx-auto">
+        <!-- Parking Slot Cards Container -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+
+            <!-- Slot 1 Card (DISTANCE) -->
+            <div id="slot1-card" class="card-shadow-light rounded-xl p-8 bg-white transition duration-500">
+                <h2 class="text-4xl font-bold mb-2 text-gray-800">SLOT 1</h2>
+                <p class="text-sm font-medium text-gray-500 mb-6">SENSOR ID: DISTANCE</p>
+                <div id="slot1-status" class="digital-font text-3xl font-bold p-6 rounded-lg text-center border-2 border-gray-300 bg-gray-50 shadow-inner">
+                    <div class="text-gray-500">LOADING DATA...</div>
+                </div>
+            </div>
+
+            <!-- Slot 2 Card (distance) -->
+            <div id="slot2-card" class="card-shadow-light rounded-xl p-8 bg-white transition duration-500">
+                <h2 class="text-4xl font-bold mb-2 text-gray-800">SLOT 2</h2>
+                <p class="text-sm font-medium text-gray-500 mb-6">SENSOR ID: distance</p>
+                <div id="slot2-status" class="digital-font text-3xl font-bold p-6 rounded-lg text-center border-2 border-gray-300 bg-gray-50 shadow-inner">
+                    <div class="text-gray-500">LOADING DATA...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Global Parking Status Message -->
+        <div id="parking-summary" class="mt-16 p-8 rounded-xl text-center font-extrabold shadow-2xl transition duration-500 border-4 border-transparent">
+            <p class="text-3xl digital-font" id="summary-message">INITIALIZING CORE SYSTEMS...</p>
+        </div>
+    </main>
+
+    <footer class="mt-16 text-center text-gray-500 text-sm">
+        <p>Telemetry Refresh: <span class="text-blue-600 digital-font">5.0</span> sec | Occupancy Threshold: <span class="text-green-600 digital-font">50 CM</span></p>
+    </footer>
+
+    <script>
+        // --- Configuration ---
+        const BASE_URL = "https://iot.roboninja.in/index.php";
+        const API_1_URL = `${BASE_URL}?action=read&UID=UC11&DISTANCE`;
+        const API_2_URL = `${BASE_URL}?action=read&UID=UC11&distance`;
+        const THRESHOLD_CM = 50;
+        const REFRESH_INTERVAL_MS = 5000;
+        const TOTAL_SLOTS = 2; // Fixed number of slots
+
+        // --- DOM Elements ---
+        const slot1Card = document.getElementById('slot1-card');
+        const slot1Status = document.getElementById('slot1-status');
+        const slot2Card = document.getElementById('slot2-card');
+        const slot2Status = document.getElementById('slot2-status');
+        const summaryDiv = document.getElementById('parking-summary');
+        const summaryMessage = document.getElementById('summary-message');
+        const availableCountElement = document.getElementById('available-count');
+        const occupiedCountElement = document.getElementById('occupied-count');
+
+        /**
+         * Fetches data from the given URL with exponential backoff for resilience.
+         * @param {string} url - The API endpoint URL.
+         * @param {number} maxRetries - Maximum number of retries.
+         * @returns {Promise<number|null>} - The distance value or a high default on failure.
+         */
+        async function fetchWithRetry(url, maxRetries = 3) {
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+                    const text = await response.text();
+                    const distance = parseFloat(text.trim());
+
+                    if (isNaN(distance)) {
+                        console.warn(`API returned non-numeric data for ${url}: "${text.trim()}"`);
+                        throw new Error("Invalid distance format from API");
+                    }
+                    return distance;
+
+                } catch (error) {
+                    if (attempt === maxRetries - 1) {
+                        console.error(`[CRITICAL] Failed to fetch ${url} after ${maxRetries} attempts. Assuming available.`, error);
+                        // Return a very high distance on final failure
+                        return 9999;
+                    }
+                    // Implement exponential backoff delay (1s, 2s, 4s, ...)
+                    const delay = Math.pow(2, attempt) * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+            return 9999;
+        }
+
+        /**
+         * Updates the UI for a single parking slot with a 'techy' theme.
+         * @param {HTMLElement} cardElement - The main card element.
+         * @param {HTMLElement} statusElement - The element showing the distance/status text.
+         * @param {string} slotName - The name of the slot (e.g., "SLOT 1").
+         * @param {number} distance - The fetched distance in cm.
+         * @returns {boolean} - True if the slot is full, false otherwise.
+         */
+        function updateSlotUI(cardElement, statusElement, slotName, distance) {
+            const isFull = distance < THRESHOLD_CM;
+
+            // 1. Clear previous dynamic classes
+            cardElement.classList.remove('bg-green-100', 'is-full-animation', 'border-green-500', 'border-blue-500');
+            cardElement.classList.add('bg-white', 'card-shadow-light');
+            
+            statusElement.className = 'digital-font text-3xl font-bold p-6 rounded-lg text-center border-2 bg-gray-50 shadow-inner';
+
+            // 2. Apply new classes based on status (Full vs. Available)
+            if (isFull) {
+                // Status: FULL - Light Green background, dark text, and pulse
+                cardElement.classList.add('bg-green-50', 'is-full-animation');
+                cardElement.style.borderColor = '#38a169'; // Green-600
+                statusElement.classList.add('text-green-800', 'border-green-600');
+                statusElement.innerHTML = `<span class="text-4xl font-extrabold text-green-800">FULL ⛔</span><br><span class="text-xl text-gray-500">Distance: ${distance.toFixed(1)} cm</span>`;
+
+            } else {
+                // Status: AVAILABLE - Light Blue background, dark text
+                cardElement.style.borderColor = '#3b82f6'; // Blue-500
+                statusElement.classList.add('text-blue-800', 'border-blue-500');
+                statusElement.innerHTML = `<span class="text-4xl font-extrabold text-blue-800">AVAILABLE ✅</span><br><span class="text-xl text-gray-500">Distance: ${distance.toFixed(1)} cm</span>`;
+            }
+
+            return isFull;
+        }
+
+        /**
+         * Updates the global summary message and the slot counts in the header.
+         */
+        function updateSummaryUI(isSlot1Full, isSlot2Full) {
+            summaryDiv.className = 'mt-16 p-8 rounded-xl text-center font-extrabold shadow-2xl transition duration-500 border-4';
+            // Clear previous theme classes
+            summaryDiv.classList.remove('is-alert-animation', 'bg-red-200', 'bg-amber-200', 'bg-green-200', 'border-red-600', 'border-amber-600', 'border-green-600');
+
+            // --- Update Header Slot Counts ---
+            const occupiedCount = (isSlot1Full ? 1 : 0) + (isSlot2Full ? 1 : 0);
+            const availableCount = TOTAL_SLOTS - occupiedCount;
+            
+            occupiedCountElement.textContent = occupiedCount;
+            availableCountElement.textContent = availableCount;
+
+            // --- Update Global Summary Message (Light Theme Colors) ---
+            if (isSlot1Full && isSlot2Full) {
+                // Both Full: Critical Alert (Red)
+                summaryDiv.classList.add('is-alert-animation', 'bg-red-200', 'border-red-600');
+                summaryMessage.className = 'text-3xl digital-font text-red-800';
+                // UPDATED MESSAGE 1: Both full
+                summaryMessage.textContent = 'ALERT: ALL PARKING SLOTS ARE FULL'; 
+            } else if (isSlot1Full) {
+                // Slot 1 Full, Slot 2 Available: Warning (Amber/Yellow)
+                summaryDiv.classList.add('bg-amber-200', 'border-amber-600');
+                summaryMessage.className = 'text-3xl digital-font text-amber-800';
+                // UPDATED MESSAGE 2: Slot 1 full
+                summaryMessage.textContent = 'SLOT 1 IS FULL, PLEASE PROCEED TO SLOT 2'; 
+            } else if (isSlot2Full) {
+                // Slot 2 Full, Slot 1 Available: Warning (Amber/Yellow)
+                summaryDiv.classList.add('bg-amber-200', 'border-amber-600');
+                summaryMessage.className = 'text-3xl digital-font text-amber-800';
+                // UPDATED MESSAGE 3: Slot 2 full
+                summaryMessage.textContent = 'SLOT 2 IS FULL, PLEASE PROCEED TO SLOT 1'; 
+            } else {
+                // Both Available: Success (Green)
+                summaryDiv.classList.add('bg-green-200', 'border-green-600');
+                summaryMessage.className = 'text-3xl digital-font text-green-800';
+                summaryMessage.textContent = 'OPERATIONAL STATUS: ALL SLOTS AVAILABLE';
+            }
+        }
+
+        /**
+         * Main function to fetch all data and update the dashboard.
+         */
+        async function refreshDashboard() {
+            // 1. Fetch data for both slots concurrently
+            const [distance1, distance2] = await Promise.all([
+                fetchWithRetry(API_1_URL), // Slot 1 (DISTANCE)
+                fetchWithRetry(API_2_URL)  // Slot 2 (distance)
+            ]);
+
+            // Ensure a number is used (defaulting to a high value on error)
+            const d1 = distance1 !== null ? distance1 : 9999;
+            const d2 = distance2 !== null ? distance2 : 9999;
+
+            // 2. Update individual slot UIs
+            const isSlot1Full = updateSlotUI(slot1Card, slot1Status, 'SLOT 1', d1);
+            const isSlot2Full = updateSlotUI(slot2Card, slot2Status, 'SLOT 2', d2);
+
+            // 3. Update global summary UI
+            updateSummaryUI(isSlot1Full, isSlot2Full);
+        }
+
+        // --- Initialization ---
+        window.onload = function() {
+            // Initial call
+            refreshDashboard();
+
+            // Set up interval for continuous refreshing
+            setInterval(refreshDashboard, REFRESH_INTERVAL_MS);
+        }
+    </script>
+</body>
+</html>
